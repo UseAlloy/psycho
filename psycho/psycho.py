@@ -26,17 +26,17 @@ from collections import namedtuple
 
 
 class Psycho:
-    conn = None
+    connection = None
     cursor = None
-    conf = None
+    config = None
 
     def __init__(self, **kwargs):
-        self.conf = kwargs
-        self.conf["keep_alive"] = kwargs.get("keep_alive", False)
-        self.conf["charset"] = kwargs.get("charset", "utf8")
-        self.conf["host"] = kwargs.get("host", "localhost")
-        self.conf["port"] = kwargs.get("port", 3306)
-        self.conf["autocommit"] = kwargs.get("autocommit", False)
+        self.config = kwargs
+        self.config["keep_alive"] = kwargs.get("keep_alive", False)
+        self.config["charset"] = kwargs.get("charset", "utf8")
+        self.config["host"] = kwargs.get("host", "localhost")
+        self.config["port"] = kwargs.get("port", 3306)
+        self.config["autocommit"] = kwargs.get("autocommit", False)
 
         self.connect()
 
@@ -44,15 +44,15 @@ class Psycho:
         """Connect to the postgresql server"""
 
         try:
-            self.conn = psycopg2.connect(
-                database=self.conf['db'],
-                host=self.conf['host'],
-                port=self.conf['port'],
-                user=self.conf['user'],
-                password=self.conf['password'],
+            self.connection = psycopg2.connect(
+                database=self.config['db'],
+                host=self.config['host'],
+                port=self.config['port'],
+                user=self.config['user'],
+                password=self.config['password'],
             )
-            self.cursor = self.conn.cursor()
-            self.conn.autocommit(self.conf["autocommit"])
+            self.cursor = self.connection.cursor()
+            self.connection.autocommit(self.config["autocommit"])
         except:
             print ("Postgresql connection failed")
             raise
@@ -194,16 +194,16 @@ class Psycho:
 
     def commit(self):
         """Commit a transaction (transactional engines like InnoDB require this)"""
-        return self.conn.commit()
+        return self.connection.commit()
 
     def is_open(self):
         """Check if the connection is open"""
-        return self.conn.open
+        return self.connection.open
 
     def end(self):
         """Kill the connection"""
         self.cursor.close()
-        self.conn.close()
+        self.connection.close()
 
     def getRows(self, cursor, result=None):
         rows = None
