@@ -45,7 +45,7 @@ class Psycho:
 
         try:
             self.connection = psycopg2.connect(
-                database=self.config['db'],
+                database=self.config['database'],
                 host=self.config['host'],
                 port=self.config['port'],
                 user=self.config['user'],

@@ -15,9 +15,9 @@ from psycho import Psycho
 
 db = Psycho(
 	host="127.0.0.1",
-	db="mydatabase",
+	database="mydatabase",
 	user="username",
-	passwd="password",
+	password="password",
 	keep_alive=True # try and reconnect timed out postgresql connections?
 )
 
