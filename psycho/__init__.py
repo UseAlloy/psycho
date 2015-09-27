@@ -1,0 +1,1 @@
+from .psycho import Psycho
