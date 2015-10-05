@@ -25,12 +25,22 @@ import psycopg2
 from collections import namedtuple
 
 
+class ConfigError(Exception):
+    def __init__(self, message):
+        self.message = message
+
+
 class Psycho:
     connection = None
     cursor = None
     config = None
 
     def __init__(self, **kwargs):
+        try:
+            self.schema = kwargs.pop("schema")
+        except KeyError:
+            raise ConfigError("You must specify a default schema.")
+
         self.config = kwargs
         self.config["keep_alive"] = kwargs.get("keep_alive", False)
         self.config["charset"] = kwargs.get("charset", "utf8")
@@ -56,19 +66,18 @@ class Psycho:
             print ("Postgresql connection failed")
             raise
 
-    def getOne(self, table=None, fields='*', where=None, order=None, limit=1):
+    def getOne(self, table=None, fields='*', where=None, order=None, limit=1, schema=None):
         """
         Get a single result
 
-        table = (str) schema_name.table_name
+        table = (str) table_name
         fields = (field1, field2 ...) list of fields to select
         where = ("parameterizedstatement", [parameters])
                         eg: ("id=%s and name=%s", [1, "test"])
         order = [field, ASC|DESC]
         limit = limit
         """
-
-        cursor = self._select(table, fields, where, order, limit)
+        cursor = self._select(table, fields, where, order, limit, schema)
         result = cursor.fetchone()
 
         row = None
@@ -78,49 +87,48 @@ class Psycho:
 
         return row
 
-    def getAll(self, table=None, fields='*', where=None, order=None, limit=None):
+    def getAll(self, table=None, fields='*', where=None, order=None, limit=None, schema=None):
         """
         Get all results
 
-        table = (str) schema_name.table_name
+        table = (str) table_name
         fields = (field1, field2 ...) list of fields to select
         where = ("parameterizedstatement", [parameters])
                         eg: ("id=%s and name=%s", [1, "test"])
         order = [field, ASC|DESC]
         limit = limit
         """
-
         cursor = self._select(table, fields, where, order, limit)
         result = cursor.fetchall()
 
         return self.getRows(cursor, result)
 
-    def leftJoin(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None):
+    def leftJoin(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None, schemas=()):
         """
         Run an inner left join query
 
-        tables = tuple(str, str) (schema.table1, schema.table2)
+        tables = tuple(str, str) (table1, table2)
         fields = ([fields from table1], [fields from table 2])  # fields to select
         join_fields = (field1, field2)  # fields to join. field1 belongs to table1 and field2 belongs to table 2
         where = ("parameterizedstatement", [parameters])
                         eg: ("id=%s and name=%s", [1, "test"])
         order = [field, ASC|DESC]
         limit = limit
+        schemas = tuple(str, str) (schema1, schema2)
         """
-
-        cursor = self._select_join(tables, fields, join_fields, where, order, limit)
+        cursor = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
         result = cursor.fetchall()
 
         return self.getRows(cursor, result)
 
-    def insert(self, table, data):
+    def insert(self, table, data, schema=None):
         """Insert a record"""
-
-        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
+        if schema is None:
+            schema = self.schema
 
         query = self._serialize_insert(data)
 
-        sql = "INSERT INTO %s (%s) VALUES (%s);" % (table_sql, query[0], query[1])
+        sql = "INSERT INTO \"%s\".\"%s\" (%s) VALUES (%s);" % (schema, table, query[0], query[1])
 
         # Check data values for python datetimes
         for key, value in data.items():
@@ -129,14 +137,14 @@ class Psycho:
 
         return self.query(sql, list(data.values()))
 
-    def update(self, table, data, where=None):
+    def update(self, table, data, where=None, schema=None):
         """Insert a record"""
-
-        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
+        if schema is None:
+            schema = self.schema
 
         query = self._serialize_update(data)
 
-        sql = "UPDATE %s SET %s" % (table_sql, query)
+        sql = "UPDATE \"%s\".\"%s\" SET %s" % (schema, table, query)
 
         if where and len(where) > 0:
             sql += " WHERE %s" % where[0]
@@ -151,8 +159,9 @@ class Psycho:
             list(data.values()) + where[1] if where and len(where) > 1 else data.values()
         )
 
-    def insertOrUpdate(self, table, data, keys):
-        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
+    def insertOrUpdate(self, table, data, keys, schema=None):
+        if schema is None:
+            schema = self.schema
 
         insert_data = data.copy()
 
@@ -162,7 +171,8 @@ class Psycho:
 
         update = self._serialize_update(data)
 
-        sql = "INSERT INTO %s (%s) VALUES(%s) ON DUPLICATE KEY UPDATE %s" % (table_sql, insert[0], insert[1], update)
+        sql = "INSERT INTO \"%s\".\"%s\" (%s) VALUES(%s) ON DUPLICATE KEY UPDATE %s" % \
+              (schema, table, insert[0], insert[1], update)
 
         # Check values for python datetimes
         values = insert_data.values() + data.values()
@@ -172,12 +182,12 @@ class Psycho:
 
         return self.query(sql, list(values))
 
-    def delete(self, table, where=None):
+    def delete(self, table, where=None, schema=None):
         """Delete rows based on a where condition"""
+        if schema is None:
+            schema = self.schema
 
-        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
-
-        sql = "DELETE FROM %s" % table_sql
+        sql = "DELETE FROM \"%s\".\"%s\"" % (schema, table)
 
         if where and len(where) > 0:
             sql += " WHERE %s" % where[0]
@@ -239,12 +249,12 @@ class Psycho:
         """Format update dict values into string"""
         return "=%s,".join(data.keys()) + "=%s"
 
-    def _select(self, table=None, fields=(), where=None, order=None, limit=None):
+    def _select(self, table=None, fields=(), where=None, order=None, limit=None, schema=None):
         """Run a select query"""
+        if schema is None:
+            schema = self.schema
 
-        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
-
-        sql = "SELECT %s FROM %s" % (",".join(fields), table_sql)
+        sql = "SELECT %s FROM \"%s\".\"%s\"" % (",".join(fields), schema, table)
 
         # where conditions
         if where and len(where) > 0:
@@ -263,21 +273,22 @@ class Psycho:
 
         return self.query(sql, where[1] if where and len(where) > 1 else None)
 
-    def _select_join(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None):
+    def _select_join(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None, schemas=()):
         """Run an inner left join query"""
+        if not schemas:
+            schemas = (self.schema, self.schema)
 
-        table_sql = []
-        for table in tables:
-            table_sql.append(".".join(['"' + t + '"' for t in table.split(".")]))
+        fields = ["\"" + schemas[0] + "\".\"" + tables[0] + "\"." + f for f in fields[0]] + \
+                 ["\"" + schemas[1] + "\".\"" + tables[1] + "\"." + f for f in fields[1]]
 
-        fields = [table_sql[0] + "." + f for f in fields[0]] + [table_sql[1] + "." + f for f in fields[1]]
-
-        sql = "SELECT %s FROM %s LEFT JOIN %s ON (%s = %s)" % (
+        sql = "SELECT %s FROM \"%s\".\"%s\" LEFT JOIN \"%s\".\"%s\" ON (%s = %s)" % (
             ",".join(fields),
-            table_sql[0],
-            table_sql[1],
-            table_sql[0] + "." + join_fields[0],
-            table_sql[1] + "." + join_fields[1]
+            schemas[0],
+            tables[0],
+            schemas[1],
+            tables[1],
+            "\"" + schemas[0] + "\".\"" + tables[0] + "\"." + join_fields[0],
+            "\"" + schemas[1] + "\".\"" + tables[1] + "\"." + join_fields[1]
         )
 
         # where conditions
