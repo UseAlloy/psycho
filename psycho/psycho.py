@@ -60,7 +60,7 @@ class Psycho:
         """
         Get a single result
 
-        table = (str) table_name
+        table = (str) schema_name.table_name
         fields = (field1, field2 ...) list of fields to select
         where = ("parameterizedstatement", [parameters])
                         eg: ("id=%s and name=%s", [1, "test"])
@@ -82,7 +82,7 @@ class Psycho:
         """
         Get all results
 
-        table = (str) table_name
+        table = (str) schema_name.table_name
         fields = (field1, field2 ...) list of fields to select
         where = ("parameterizedstatement", [parameters])
                         eg: ("id=%s and name=%s", [1, "test"])
@@ -99,7 +99,7 @@ class Psycho:
         """
         Run an inner left join query
 
-        tables = (table1, table2)
+        tables = tuple(str, str) (schema.table1, schema.table2)
         fields = ([fields from table1], [fields from table 2])  # fields to select
         join_fields = (field1, field2)  # fields to join. field1 belongs to table1 and field2 belongs to table 2
         where = ("parameterizedstatement", [parameters])
@@ -116,9 +116,11 @@ class Psycho:
     def insert(self, table, data):
         """Insert a record"""
 
+        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
+
         query = self._serialize_insert(data)
 
-        sql = "INSERT INTO %s (%s) VALUES (%s);" % (table, query[0], query[1])
+        sql = "INSERT INTO %s (%s) VALUES (%s);" % (table_sql, query[0], query[1])
 
         # Check data values for python datetimes
         for key, value in data.items():
@@ -130,9 +132,11 @@ class Psycho:
     def update(self, table, data, where=None):
         """Insert a record"""
 
+        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
+
         query = self._serialize_update(data)
 
-        sql = "UPDATE %s SET %s" % (table, query)
+        sql = "UPDATE %s SET %s" % (table_sql, query)
 
         if where and len(where) > 0:
             sql += " WHERE %s" % where[0]
@@ -148,6 +152,8 @@ class Psycho:
         )
 
     def insertOrUpdate(self, table, data, keys):
+        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
+
         insert_data = data.copy()
 
         data = {k: data[k] for k in data if k not in keys}
@@ -156,7 +162,7 @@ class Psycho:
 
         update = self._serialize_update(data)
 
-        sql = "INSERT INTO %s (%s) VALUES(%s) ON DUPLICATE KEY UPDATE %s" % (table, insert[0], insert[1], update)
+        sql = "INSERT INTO %s (%s) VALUES(%s) ON DUPLICATE KEY UPDATE %s" % (table_sql, insert[0], insert[1], update)
 
         # Check values for python datetimes
         values = insert_data.values() + data.values()
@@ -169,7 +175,9 @@ class Psycho:
     def delete(self, table, where=None):
         """Delete rows based on a where condition"""
 
-        sql = "DELETE FROM %s" % table
+        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
+
+        sql = "DELETE FROM %s" % table_sql
 
         if where and len(where) > 0:
             sql += " WHERE %s" % where[0]
@@ -234,7 +242,9 @@ class Psycho:
     def _select(self, table=None, fields=(), where=None, order=None, limit=None):
         """Run a select query"""
 
-        sql = "SELECT %s FROM \"%s\"" % (",".join(fields), table)
+        table_sql = ".".join(['"' + t + '"' for t in table.split(".")])
+
+        sql = "SELECT %s FROM %s" % (",".join(fields), table_sql)
 
         # where conditions
         if where and len(where) > 0:
@@ -256,14 +266,18 @@ class Psycho:
     def _select_join(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None):
         """Run an inner left join query"""
 
-        fields = [tables[0] + "." + f for f in fields[0]] + [tables[1] + "." + f for f in fields[1]]
+        table_sql = []
+        for table in tables:
+            table_sql.append(".".join(['"' + t + '"' for t in table.split(".")]))
+
+        fields = [table_sql[0] + "." + f for f in fields[0]] + [table_sql[1] + "." + f for f in fields[1]]
 
         sql = "SELECT %s FROM %s LEFT JOIN %s ON (%s = %s)" % (
             ",".join(fields),
-            tables[0],
-            tables[1],
-            tables[0] + "." + join_fields[0],
-            tables[1] + "." + join_fields[1]
+            table_sql[0],
+            table_sql[1],
+            table_sql[0] + "." + join_fields[0],
+            table_sql[1] + "." + join_fields[1]
         )
 
         # where conditions
