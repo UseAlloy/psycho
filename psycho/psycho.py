@@ -52,12 +52,11 @@ class Psycho:
                 password=self.config['password'],
             )
             self.cursor = self.connection.cursor()
-            self.connection.autocommit(self.config["autocommit"])
         except:
             print ("Postgresql connection failed")
             raise
 
-    def getOne(self, table=None, fields='*', where=None, order=None, limit=(0, 1)):
+    def getOne(self, table=None, fields='*', where=None, order=None, limit=1):
         """
         Get a single result
 
@@ -88,7 +87,7 @@ class Psycho:
         where = ("parameterizedstatement", [parameters])
                         eg: ("id=%s and name=%s", [1, "test"])
         order = [field, ASC|DESC]
-        limit = [limit1, limit2]
+        limit = limit
         """
 
         cursor = self._select(table, fields, where, order, limit)
@@ -106,7 +105,7 @@ class Psycho:
         where = ("parameterizedstatement", [parameters])
                         eg: ("id=%s and name=%s", [1, "test"])
         order = [field, ASC|DESC]
-        limit = [limit1, limit2]
+        limit = limit
         """
 
         cursor = self._select_join(tables, fields, join_fields, where, order, limit)
@@ -215,7 +214,7 @@ class Psycho:
 
         return rows
 
-    # ===
+    # === Private
 
     def _dumps_datetime(self, value):
         """If value is python datetime instance, dump it as string"""
@@ -223,7 +222,7 @@ class Psycho:
 
     def _serialize_insert(self, data):
         """Format insert dict values into strings"""
-        keys = ",".join(["`{}`".format(key) for key in data.keys()])
+        keys = ",".join(["\"{}\"".format(key) for key in data.keys()])
         vals = ",".join(["%s" for k in data])
 
         return [keys, vals]
@@ -235,7 +234,7 @@ class Psycho:
     def _select(self, table=None, fields=(), where=None, order=None, limit=None):
         """Run a select query"""
 
-        sql = "SELECT %s FROM `%s`" % (",".join(fields), table)
+        sql = "SELECT %s FROM \"%s\"" % (",".join(fields), table)
 
         # where conditions
         if where and len(where) > 0:
@@ -250,10 +249,7 @@ class Psycho:
 
         # limit
         if limit:
-            sql += " LIMIT %s" % limit[0]
-
-            if len(limit) > 1:
-                sql += ", %s" % limit[1]
+            sql += " LIMIT %s" % limit
 
         return self.query(sql, where[1] if where and len(where) > 1 else None)
 
@@ -283,10 +279,7 @@ class Psycho:
 
         # limit
         if limit:
-            sql += " LIMIT %s" % limit[0]
-
-            if len(limit) > 1:
-                sql += ", %s" % limit[1]
+            sql += " LIMIT %s" % limit
 
         return self.query(sql, where[1] if where and len(where) > 1 else None)
 
