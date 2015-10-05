@@ -65,7 +65,7 @@ class Psycho:
         where = ("parameterizedstatement", [parameters])
                         eg: ("id=%s and name=%s", [1, "test"])
         order = [field, ASC|DESC]
-        limit = [limit1, limit2]
+        limit = limit
         """
 
         cursor = self._select(table, fields, where, order, limit)
