@@ -127,7 +127,7 @@ class Psycho:
             if isinstance(value, datetime.datetime):
                 data[key] = self._dumps_datetime(value)
 
-        return self.query(sql, data.values())
+        return self.query(sql, list(data.values()))
 
     def update(self, table, data, where=None):
         """Insert a record"""
@@ -170,7 +170,7 @@ class Psycho:
             if isinstance(value, datetime.datetime):
                 values[idx] = self._dumps_datetime(value)
 
-        return self.query(sql, values)
+        return self.query(sql, list(values))
 
     def delete(self, table, where=None):
         """Delete rows based on a where condition"""
