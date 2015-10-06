@@ -121,14 +121,17 @@ class Psycho:
 
         return self.getRows(cursor, result)
 
-    def insert(self, table, data, schema=None):
+    def insert(self, table, data, schema=None, returning=None):
         """Insert a record"""
         if schema is None:
             schema = self.schema
 
         query = self._serialize_insert(data)
 
-        sql = "INSERT INTO \"%s\".\"%s\" (%s) VALUES (%s);" % (schema, table, query[0], query[1])
+        sql = "INSERT INTO \"%s\".\"%s\" (%s) VALUES (%s)" % (schema, table, query[0], query[1])
+
+        if returning is not None:
+            sql += " RETURNING (%s)" % ",".join(returning)
 
         # Check data values for python datetimes
         for key, value in data.items():
@@ -240,7 +243,7 @@ class Psycho:
 
     def _serialize_insert(self, data):
         """Format insert dict values into strings"""
-        keys = ",".join(["\"{}\"".format(key) for key in data.keys()])
+        keys = ",".join(["{}".format(key) for key in data.keys()])
         vals = ",".join(["%s" for k in data])
 
         return [keys, vals]
