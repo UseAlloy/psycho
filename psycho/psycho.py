@@ -77,8 +77,18 @@ class Psycho:
         order = [field, ASC|DESC]
         limit = limit
         """
-        cursor = self._select(table, fields, where, order, limit, schema)
-        result = cursor.fetchone()
+        try:
+            cursor = self._select(table, fields, where, order, limit, schema)
+            result = cursor.fetchone()
+        except psycopg2.DatabaseError:
+            try:
+                self.connect()
+            except psycopg2.DatabaseError:
+                print("DatabaseError: Connect retry failed.")
+                raise
+            else:
+                cursor = self._select(table, fields, where, order, limit, schema)
+                result = cursor.fetchone()
 
         row = None
         if result:
@@ -98,8 +108,18 @@ class Psycho:
         order = [field, ASC|DESC]
         limit = limit
         """
-        cursor = self._select(table, fields, where, order, limit)
-        result = cursor.fetchall()
+        try:
+            cursor = self._select(table, fields, where, order, limit)
+            result = cursor.fetchall()
+        except psycopg2.DatabaseError:
+            try:
+                self.connect()
+            except psycopg2.DatabaseError:
+                print("DatabaseError: Connect retry failed.")
+                raise
+            else:
+                cursor = self._select(table, fields, where, order, limit)
+                result = cursor.fetchall()
 
         return self.getRows(cursor, result)
 
@@ -116,8 +136,18 @@ class Psycho:
         limit = limit
         schemas = tuple(str, str) (schema1, schema2)
         """
-        cursor = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
-        result = cursor.fetchall()
+        try:
+            cursor = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
+            result = cursor.fetchall()
+        except psycopg2.DatabaseError:
+            try:
+                self.connect()
+            except psycopg2.DatabaseError:
+                print("DatabaseError: Connect retry failed.")
+                raise
+            else:
+                cursor = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
+                result = cursor.fetchall()
 
         return self.getRows(cursor, result)
 
@@ -204,8 +234,13 @@ class Psycho:
         try:
             self.cursor.execute(sql, params)
         except psycopg2.DatabaseError:
-            print("Database Error")
-            raise
+            try:
+                self.connect()
+            except psycopg2.DatabaseError:
+                print("Database Error. Cannot connect.")
+                raise
+            else:
+                self.cursor.execute(sql, params)
         except:
             print("Query failed")
             raise
@@ -228,7 +263,16 @@ class Psycho:
     def getRows(self, cursor, result=None):
         rows = None
         if not result:
-            result = cursor.fetchall()
+            try:
+                result = cursor.fetchall()
+            except psycopg2.DatabaseError:
+                try:
+                    self.connect()
+                except psycopg2.DatabaseError:
+                    print("DatabaseError: Connect retry failed.")
+                    raise
+                else:
+                    result = cursor.fetchall()
 
         Row = namedtuple("Row", [f[0] for f in cursor.description])
         rows = [Row(*r) for r in result]
