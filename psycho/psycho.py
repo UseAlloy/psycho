@@ -66,7 +66,7 @@ class Psycho:
             print ("Postgresql connection failed")
             raise
 
-    def getOne(self, table=None, fields='*', where=None, order=None, limit=1, schema=None):
+    def get_one(self, table=None, fields='*', where=None, order=None, limit=1, schema=None):
         """
         Get a single result
 
@@ -97,7 +97,7 @@ class Psycho:
 
         return row
 
-    def getAll(self, table=None, fields='*', where=None, order=None, limit=None, schema=None):
+    def get_all(self, table=None, fields='*', where=None, order=None, limit=None, schema=None):
         """
         Get all results
 
@@ -121,9 +121,9 @@ class Psycho:
                 cursor = self._select(table, fields, where, order, limit)
                 result = cursor.fetchall()
 
-        return self.getRows(cursor, result)
+        return self.get_rows(cursor, result)
 
-    def leftJoin(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None, schemas=()):
+    def left_join(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None, schemas=()):
         """
         Run an inner left join query
 
@@ -149,7 +149,7 @@ class Psycho:
                 cursor = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
                 result = cursor.fetchall()
 
-        return self.getRows(cursor, result)
+        return self.get_rows(cursor, result)
 
     def insert(self, table, data, schema=None, returning=None):
         """Insert a record"""
@@ -192,7 +192,7 @@ class Psycho:
             list(data.values()) + where[1] if where and len(where) > 1 else data.values()
         )
 
-    def insertOrUpdate(self, table, data, keys, schema=None):
+    def insert_or_update(self, table, data, keys, schema=None):
         if schema is None:
             schema = self.schema
 
@@ -260,7 +260,7 @@ class Psycho:
         self.cursor.close()
         self.connection.close()
 
-    def getRows(self, cursor, result=None):
+    def get_rows(self, cursor, result=None):
         rows = None
         if not result:
             try:
@@ -279,7 +279,27 @@ class Psycho:
 
         return rows
 
+    def query_rows(self, sql, params=None):
+        return self.get_rows(self.query(sql, params))
+
+    def query_dict(self, sql, params=None):
+        return self.row_to_dict(self.query_rows(sql, params))
+
+    def row_to_dict(self, rows):
+        if type(rows) == list:
+            row_list = []
+            for row in rows:
+                row_list.append(self._convert_row_to_dict(row))
+            return row_list
+        else:
+            return self._convert_row_to_dict(rows)
+
     # === Private
+    def _convert_row_to_dict(row):
+        row_dict = {}
+        for field in row._fields:
+            row_dict[field] = getattr(row, field)
+        return row_dict
 
     def _dumps_datetime(self, value):
         """If value is python datetime instance, dump it as string"""
