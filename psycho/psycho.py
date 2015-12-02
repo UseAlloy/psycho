@@ -295,7 +295,8 @@ class Psycho:
             return self._convert_row_to_dict(rows)
 
     # === Private
-    def _convert_row_to_dict(row):
+
+    def _convert_row_to_dict(self, row):
         row_dict = {}
         for field in row._fields:
             row_dict[field] = getattr(row, field)
