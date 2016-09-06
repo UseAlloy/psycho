@@ -48,7 +48,10 @@ class Psycho:
         self.config["port"] = kwargs.get("port", 3306)
         self.config["autocommit"] = kwargs.get("autocommit", False)
 
-        self.connect()
+        try:
+            self.connect()
+        except psycopg2.OperationalError:
+            pass
 
     def connect(self):
         """Connect to the postgresql server"""
@@ -233,7 +236,7 @@ class Psycho:
         # check if connection is alive. if not, reconnect
         try:
             self.cursor.execute(sql, params)
-        except psycopg2.DatabaseError:
+        except (psycopg2.DatabaseError, AttributeError):
             try:
                 self.connect()
             except psycopg2.DatabaseError:
