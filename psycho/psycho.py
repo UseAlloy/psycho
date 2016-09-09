@@ -19,10 +19,11 @@ Scott Clark, Alloy
 September 2015
 """
 
+from collections import namedtuple
+from contextlib import contextmanager
 import datetime
 
 import psycopg2
-from collections import namedtuple
 
 
 class ConfigError(Exception):
@@ -52,6 +53,29 @@ class Psycho:
             self.connect()
         except psycopg2.OperationalError:
             pass
+
+    @contextmanager
+    def atomic(self):
+        """
+        Wraps a series of database transactions to make them atomic.
+        If any of the transactions throws an exception, the connection is closed,
+        rolling back any of the changes that were made. Otherwise, the changes get
+        committed.
+
+        Additionally, if atomic_commit=False kwarg is passed to the Psycho
+        constructor, every atomic transaction will be rolled back upon completion.
+        This is useful for testing application logic modularly without committing
+        to the database.
+        """
+        self.connect()
+
+        try:
+            yield self
+        except Exception as e:
+            self.end()
+            raise e
+        else:
+            self.commit()
 
     def connect(self):
         """Connect to the postgresql server"""
