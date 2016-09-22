@@ -258,19 +258,21 @@ class Psycho:
         """Run a raw query"""
 
         # check if connection is alive. if not, reconnect
-        try:
-            self.cursor.execute(sql, params)
-        except (psycopg2.DatabaseError, AttributeError):
+        for count in range(0, 5):
             try:
-                self.connect()
-            except psycopg2.DatabaseError:
-                print("Database Error. Cannot connect.")
+                self.cursor.execute(sql, params)
+            except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
+                try:
+                    self.connect()
+                except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
+                    print("DatabaseError: Connect retry failed.")
+                    raise
+                else:
+                    continue
+            except:
                 raise
             else:
-                self.cursor.execute(sql, params)
-        except:
-            print("Query failed")
-            raise
+                break
 
         return self.cursor
 
@@ -290,16 +292,19 @@ class Psycho:
     def get_rows(self, cursor, result=None):
         rows = None
         if not result:
-            try:
-                result = cursor.fetchall()
-            except psycopg2.DatabaseError:
+            for count in range(0, 5):
                 try:
-                    self.connect()
-                except psycopg2.DatabaseError:
-                    print("DatabaseError: Connect retry failed.")
-                    raise
-                else:
                     result = cursor.fetchall()
+                except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
+                    try:
+                        self.connect()
+                    except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
+                        print("DatabaseError: Connect retry failed.")
+                        raise
+                    else:
+                        continue
+                else:
+                    break
 
         Row = namedtuple("Row", [f[0] for f in cursor.description])
         rows = [Row(*r) for r in result]
