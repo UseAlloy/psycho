@@ -196,9 +196,14 @@ class Psycho:
                 data[key] = self._dumps_datetime(value)
 
         cursor = self.query(sql, list(data.values()))
+
+        if returning is not None:
+            return_val = cursor.fetchone()
+
         if close:
             cursor.close()
-        return cursor
+
+        return return_val if returning is not None else cursor
 
     def update(self, table, data, where=None, schema=None, close=True):
         """Insert a record"""
