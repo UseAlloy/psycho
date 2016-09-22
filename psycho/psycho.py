@@ -88,7 +88,6 @@ class Psycho:
                 user=self.config['user'],
                 password=self.config['password'],
             )
-            self.cursor = self.connection.cursor()
         except:
             print ("Postgresql connection failed")
             raise
@@ -121,6 +120,7 @@ class Psycho:
         if result:
             Row = namedtuple("Row", [f[0] for f in cursor.description])
             row = Row(*result)
+        cursor.close()
 
         return row
 
@@ -178,7 +178,7 @@ class Psycho:
 
         return self.get_rows(cursor, result)
 
-    def insert(self, table, data, schema=None, returning=None):
+    def insert(self, table, data, schema=None, returning=None, close=True):
         """Insert a record"""
         if schema is None:
             schema = self.schema
@@ -195,9 +195,12 @@ class Psycho:
             if isinstance(value, datetime.datetime):
                 data[key] = self._dumps_datetime(value)
 
-        return self.query(sql, list(data.values()))
+        cursor = self.query(sql, list(data.values()))
+        if close:
+            cursor.close()
+        return cursor
 
-    def update(self, table, data, where=None, schema=None):
+    def update(self, table, data, where=None, schema=None, close=True):
         """Insert a record"""
         if schema is None:
             schema = self.schema
@@ -214,12 +217,13 @@ class Psycho:
             if isinstance(value, datetime.datetime):
                 data[key] = self._dumps_datetime(value)
 
-        return self.query(
-            sql,
-            list(data.values()) + where[1] if where and len(where) > 1 else data.values()
-        )
+        cursor = self.query(
+            sql, list(data.values()) + where[1] if where and len(where) > 1 else data.values())
+        if close:
+            cursor.close()
+        return cursor
 
-    def insert_or_update(self, table, data, keys, schema=None):
+    def insert_or_update(self, table, data, keys, schema=None, close=True):
         if schema is None:
             schema = self.schema
 
@@ -240,9 +244,12 @@ class Psycho:
             if isinstance(value, datetime.datetime):
                 values[idx] = self._dumps_datetime(value)
 
-        return self.query(sql, list(values))
+        cursor = self.query(sql, list(values))
+        if close:
+            cursor.close()
+        return cursor
 
-    def delete(self, table, where=None, schema=None):
+    def delete(self, table, where=None, schema=None, close=True):
         """Delete rows based on a where condition"""
         if schema is None:
             schema = self.schema
@@ -252,15 +259,18 @@ class Psycho:
         if where and len(where) > 0:
             sql += " WHERE %s" % where[0]
 
-        return self.query(sql, where[1] if where and len(where) > 1 else None)
+        cursor = self.query(sql, where[1] if where and len(where) > 1 else None)
+        if close:
+            cursor.close()
+        return cursor
 
     def query(self, sql, params=None):
         """Run a raw query"""
-
         # check if connection is alive. if not, reconnect
+        cursor = self.connection.cursor()
         for count in range(0, 5):
             try:
-                self.cursor.execute(sql, params)
+                cursor.execute(sql, params)
             except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
                 try:
                     self.connect()
@@ -274,7 +284,7 @@ class Psycho:
             else:
                 break
 
-        return self.cursor
+        return cursor
 
     def commit(self):
         """Commit a transaction (transactional engines like InnoDB require this)"""
@@ -286,7 +296,6 @@ class Psycho:
 
     def end(self):
         """Kill the connection"""
-        self.cursor.close()
         self.connection.close()
 
     def get_rows(self, cursor, result=None):
@@ -308,6 +317,9 @@ class Psycho:
 
         Row = namedtuple("Row", [f[0] for f in cursor.description])
         rows = [Row(*r) for r in result]
+
+        # Close the cursor
+        cursor.close()
 
         return rows
 
