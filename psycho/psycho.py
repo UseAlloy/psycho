@@ -120,7 +120,7 @@ class Psycho:
         if result:
             Row = namedtuple("Row", [f[0] for f in cursor.description])
             row = Row(*result)
-        cursor.close()
+        #  cursor.close()
 
         return row
 
@@ -200,8 +200,8 @@ class Psycho:
         if returning is not None:
             return_val = cursor.fetchone()
 
-        if close:
-            cursor.close()
+        #  if close:
+            #  cursor.close()
 
         return return_val if returning is not None else cursor
 
@@ -224,8 +224,8 @@ class Psycho:
 
         cursor = self.query(
             sql, list(data.values()) + where[1] if where and len(where) > 1 else data.values())
-        if close:
-            cursor.close()
+        #  if close:
+            #  cursor.close()
         return cursor
 
     def insert_or_update(self, table, data, keys, schema=None, close=True):
@@ -250,8 +250,8 @@ class Psycho:
                 values[idx] = self._dumps_datetime(value)
 
         cursor = self.query(sql, list(values))
-        if close:
-            cursor.close()
+        #  if close:
+            #  cursor.close()
         return cursor
 
     def delete(self, table, where=None, schema=None, close=True):
@@ -265,8 +265,8 @@ class Psycho:
             sql += " WHERE %s" % where[0]
 
         cursor = self.query(sql, where[1] if where and len(where) > 1 else None)
-        if close:
-            cursor.close()
+        #  if close:
+            #  cursor.close()
         return cursor
 
     def query(self, sql, params=None):
@@ -324,7 +324,7 @@ class Psycho:
         rows = [Row(*r) for r in result]
 
         # Close the cursor
-        cursor.close()
+        #  cursor.close()
 
         return rows
 
