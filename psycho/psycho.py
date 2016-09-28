@@ -272,9 +272,9 @@ class Psycho:
     def query(self, sql, params=None):
         """Run a raw query"""
         # check if connection is alive. if not, reconnect
-        cursor = self.connection.cursor()
         for count in range(0, 5):
             try:
+                cursor = self.connection.cursor()
                 cursor.execute(sql, params)
             except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
                 try:
