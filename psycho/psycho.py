@@ -304,7 +304,7 @@ class Psycho:
         self.connection.close()
 
     def get_rows(self, cursor, result=None):
-        rows = None
+        rows = []
         if not result:
             for count in range(0, 5):
                 try:
@@ -320,8 +320,9 @@ class Psycho:
                 else:
                     break
 
-        Row = namedtuple("Row", [f[0] for f in cursor.description])
-        rows = [Row(*r) for r in result]
+        if result:
+            Row = namedtuple("Row", [f[0] for f in cursor.description])
+            rows = [Row(*r) for r in result]
 
         # Close the cursor
         cursor.close()
