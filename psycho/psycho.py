@@ -89,7 +89,6 @@ class Psycho:
                 password=self.config['password'],
             )
         except:
-            print ("Postgresql connection failed")
             raise
 
     def get_one(self, table=None, fields='*', where=None, order=None, limit=1, schema=None):
@@ -276,7 +275,7 @@ class Psycho:
             try:
                 cursor = self.connection.cursor()
                 cursor.execute(sql, params)
-            except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
+            except (psycopg2.DatabaseError, psycopg2.ProgrammingError, AttributeError):
                 try:
                     self.connect()
                 except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
