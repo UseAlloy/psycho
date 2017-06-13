@@ -22,8 +22,12 @@ September 2015
 from collections import namedtuple
 from contextlib import contextmanager
 import datetime
+import logging
 
 import psycopg2
+
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigError(Exception):
@@ -271,6 +275,7 @@ class Psycho:
     def query(self, sql, params=None):
         """Run a raw query"""
         # check if connection is alive. if not, reconnect
+        logger.debug('QUERY: {} ====== PARAMS: {}'.format(sql, str(params)))
         for count in range(0, 5):
             try:
                 cursor = self.connection.cursor()
