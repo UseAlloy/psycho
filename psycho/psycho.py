@@ -340,13 +340,16 @@ class Psycho:
         return self.row_to_dict(self.query_rows(sql, params))
 
     def row_to_dict(self, rows):
-        if type(rows) == list:
+        if rows is None:
+            return None
+
+        elif type(rows) == list:
             row_list = []
             for row in rows:
                 row_list.append(self._convert_row_to_dict(row))
             return row_list
-        else:
-            return self._convert_row_to_dict(rows)
+
+        return self._convert_row_to_dict(rows)
 
     # === Private
 
