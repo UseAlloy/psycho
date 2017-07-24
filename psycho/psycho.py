@@ -280,16 +280,21 @@ class Psycho:
             try:
                 cursor = self.connection.cursor()
                 cursor.execute(sql, params)
+
             except (psycopg2.DatabaseError, psycopg2.ProgrammingError, AttributeError):
                 try:
                     self.connect()
+
                 except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
                     print("DatabaseError: Connect retry failed.")
                     raise
+
                 else:
                     continue
+
             except:
                 raise
+
             else:
                 break
 
@@ -313,14 +318,21 @@ class Psycho:
             for count in range(0, 5):
                 try:
                     result = cursor.fetchall()
+
                 except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
                     try:
                         self.connect()
+
                     except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
                         print("DatabaseError: Connect retry failed.")
                         raise
+
                     else:
                         continue
+
+                except:
+                    raise
+
                 else:
                     break
 
