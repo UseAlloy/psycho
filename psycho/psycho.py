@@ -281,19 +281,19 @@ class Psycho:
                 cursor = self.connection.cursor()
                 cursor.execute(sql, params)
 
-            except (psycopg2.DatabaseError, psycopg2.ProgrammingError, AttributeError):
+            except psycopg2.IntegrityError as exception:
+                raise exception
+
+            except (psycopg2.DatabaseError, psycopg2.ProgrammingError, AttributeError) as exception:
                 try:
                     self.connect()
 
                 except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
                     print("DatabaseError: Connect retry failed.")
-                    raise
+                    raise exception
 
                 else:
                     continue
-
-            except:
-                raise
 
             else:
                 break
