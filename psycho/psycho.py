@@ -198,10 +198,18 @@ class Psycho:
             if isinstance(value, datetime.datetime):
                 data[key] = self._dumps_datetime(value)
 
-        cursor = self.query(sql, list(data.values()))
+        try:
+            cursor = self.query(sql, list(data.values()))
 
-        if returning is not None:
-            return_val = cursor.fetchone()
+        except:
+            raise
+
+        try:
+            if returning is not None:
+                return_val = cursor.fetchone()
+
+        except:
+            raise
 
         if close:
             cursor.close()
@@ -275,20 +283,20 @@ class Psycho:
     def query(self, sql, params=None):
         """Run a raw query"""
         # check if connection is alive. if not, reconnect
-        logger.debug('QUERY: {} ====== PARAMS: {}'.format(sql, str(params)))
+        logger.debug('Querying the database.', extra={'sql': sql, 'params': str(params)})
         for count in range(0, 5):
             try:
                 cursor = self.connection.cursor()
                 cursor.execute(sql, params)
 
-            except psycopg2.IntegrityError as exception:
+            except (psycopg2.IntegrityError, psycopg2.ProgrammingError) as exception:
                 raise exception
 
-            except (psycopg2.DatabaseError, psycopg2.ProgrammingError, AttributeError) as exception:
+            except (psycopg2.DatabaseError, AttributeError) as exception:
                 try:
                     self.connect()
 
-                except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
+                except (psycopg2.DatabaseError):
                     print("DatabaseError: Connect retry failed.")
                     raise exception
 
