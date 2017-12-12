@@ -123,7 +123,6 @@ class Psycho:
         if result:
             Row = namedtuple("Row", [f[0] for f in cursor.description])
             row = Row(*result)
-        cursor.close()
 
         return row
 
