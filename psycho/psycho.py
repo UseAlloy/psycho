@@ -92,8 +92,9 @@ class Psycho:
                 user=self.config['user'],
                 password=self.config['password'],
             )
-        except:
-            raise
+        except Exception as exc:
+            logger.error('Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
+            raise exc
 
     def get_one(self, table=None, fields='*', where=None, order=None, limit=1, schema=None):
         """
@@ -200,15 +201,19 @@ class Psycho:
         try:
             cursor = self.query(sql, list(data.values()))
 
-        except:
-            raise
+        except Exception as exc:
+            logger.error('Query failed to insert: {}'.format(str(exc)), exc_info=exc)
+            raise exc
 
-        try:
-            if returning is not None:
+        if returning is not None:
+            try:
                 return_val = cursor.fetchone()
 
-        except:
-            raise
+            except Exception as exc:
+                logger.error('Insert query failed to return specified fields ({}): {}'.format(
+                    str(returning), str(exc)
+                ), exc_info=exc)
+                raise exc
 
         if close:
             cursor.close()
@@ -330,15 +335,16 @@ class Psycho:
                     try:
                         self.connect()
 
-                    except (psycopg2.DatabaseError, psycopg2.ProgrammingError):
-                        print("DatabaseError: Connect retry failed.")
-                        raise
+                    except (psycopg2.DatabaseError, psycopg2.ProgrammingError) as exc:
+                        logger.error('Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
+                        raise exc
 
                     else:
                         continue
 
-                except:
-                    raise
+                except Exception as exc:
+                    logger.error('Query failed to fetch results: {}'.format(str(exc)), exc_info=exc)
+                    raise exc
 
                 else:
                     break
