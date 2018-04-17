@@ -21,8 +21,9 @@ September 2015
 
 from collections import namedtuple
 from contextlib import contextmanager
-import datetime
+from datetime import datetime
 import logging
+import traceback
 
 import psycopg2
 
@@ -93,7 +94,7 @@ class Psycho:
                 password=self.config['password'],
             )
         except Exception as exc:
-            logger.error('Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
+            logger.error('DB: Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
             raise exc
 
     def get_one(self, table=None, fields='*', where=None, order=None, limit=1, schema=None):
@@ -108,17 +109,32 @@ class Psycho:
         limit = limit
         """
         try:
-            cursor = self._select(table, fields, where, order, limit, schema)
+            query = self._select(table, fields, where, order, limit, schema)
+            cursor = query['cursor_obj']['cursor']
             result = cursor.fetchone()
+
         except psycopg2.DatabaseError:
             try:
                 self.connect()
+
             except psycopg2.DatabaseError:
                 print("DatabaseError: Connect retry failed.")
                 raise
+
             else:
-                cursor = self._select(table, fields, where, order, limit, schema)
+                query = self._select(table, fields, where, order, limit, schema)
+                cursor = query['cursor_obj']['cursor']
                 result = cursor.fetchone()
+
+        string_result = str(result)
+        logger.info(
+            'DB: Executed query.',
+            extra={'psycho': {
+                'sql': query['sql'],
+                'params': str(query['params']),
+                'result': string_result[:1000] if len(string_result) > 1000 else string_result,
+                'filtered_stack': query['cursor_obj']['stack'],
+                'execution_time': str(datetime.utcnow() - query['cursor_obj']['start'])}})
 
         row = None
         if result:
@@ -139,17 +155,32 @@ class Psycho:
         limit = limit
         """
         try:
-            cursor = self._select(table, fields, where, order, limit)
+            query = self._select(table, fields, where, order, limit)
+            cursor = query['cursor_obj']['cursor']
             result = cursor.fetchall()
+
         except psycopg2.DatabaseError:
             try:
                 self.connect()
+
             except psycopg2.DatabaseError:
                 print("DatabaseError: Connect retry failed.")
                 raise
+
             else:
-                cursor = self._select(table, fields, where, order, limit)
+                query = self._select(table, fields, where, order, limit)
+                cursor = query['cursor_obj']['cursor']
                 result = cursor.fetchall()
+
+        string_result = str(result)
+        logger.info(
+            'DB: Executed query.',
+            extra={'psycho': {
+                'sql': query['sql'],
+                'params': str(query['params']),
+                'result': (string_result[:2000] + '...') if len(string_result) > 2000 else string_result,
+                'filtered_stack': query['cursor_obj']['stack'],
+                'execution_time': str(datetime.utcnow() - query['cursor_obj']['start'])}})
 
         return self.get_rows(cursor, result)
 
@@ -195,25 +226,30 @@ class Psycho:
 
         # Check data values for python datetimes
         for key, value in data.items():
-            if isinstance(value, datetime.datetime):
+            if isinstance(value, datetime):
                 data[key] = self._dumps_datetime(value)
 
         try:
-            cursor = self.query(sql, list(data.values()))
+            cursor_obj = self.query(sql, list(data.values()))
 
         except Exception as exc:
-            logger.error('Query failed to insert: {}'.format(str(exc)), exc_info=exc)
+            logger.error('DB: Query failed to insert: {}'.format(str(exc)), exc_info=exc)
             raise exc
 
+        cursor = cursor_obj['cursor']
         if returning is not None:
             try:
                 return_val = cursor.fetchone()
 
             except Exception as exc:
-                logger.error('Insert query failed to return specified fields ({}): {}'.format(
+                logger.error('DB: Insert query failed to return specified fields ({}): {}'.format(
                     str(returning), str(exc)
                 ), exc_info=exc)
                 raise exc
+
+            else:
+                logger.info(
+                    'DB: Fetched single result of INSERT query.')
 
         if close:
             cursor.close()
@@ -234,11 +270,12 @@ class Psycho:
 
         # Check data values for python datetimes
         for key, value in data.items():
-            if isinstance(value, datetime.datetime):
+            if isinstance(value, datetime):
                 data[key] = self._dumps_datetime(value)
 
-        cursor = self.query(
-            sql, list(data.values()) + where[1] if where and len(where) > 1 else data.values())
+        params = list(data.values()) + where[1] if where and len(where) > 1 else data.values()
+        cursor_obj = self.query(sql, params)
+        cursor = cursor_obj['cursor']
         if close:
             cursor.close()
         return cursor
@@ -261,10 +298,11 @@ class Psycho:
         # Check values for python datetimes
         values = insert_data.values() + data.values()
         for idx, value in enumerate(values):
-            if isinstance(value, datetime.datetime):
+            if isinstance(value, datetime):
                 values[idx] = self._dumps_datetime(value)
 
-        cursor = self.query(sql, list(values))
+        cursor_obj = self.query(sql, list(values))
+        cursor = cursor_obj['cursor']
         if close:
             cursor.close()
         return cursor
@@ -279,7 +317,8 @@ class Psycho:
         if where and len(where) > 0:
             sql += " WHERE %s" % where[0]
 
-        cursor = self.query(sql, where[1] if where and len(where) > 1 else None)
+        cursor_obj = self.query(sql, where[1] if where and len(where) > 1 else None)
+        cursor = cursor_obj['cursor']
         if close:
             cursor.close()
         return cursor
@@ -287,30 +326,39 @@ class Psycho:
     def query(self, sql, params=None):
         """Run a raw query"""
         # check if connection is alive. if not, reconnect
-        logger.debug('Querying the database.', extra={'sql': sql, 'params': str(params)})
         for count in range(0, 5):
             try:
                 cursor = self.connection.cursor()
+                start = datetime.utcnow()
+                stack = [line for line in traceback.format_stack() if 'python3' not in line]
                 cursor.execute(sql, params)
 
             except (psycopg2.IntegrityError, psycopg2.ProgrammingError) as exception:
+                logger.error(
+                    'DB: Execute query failed: {}.'.format(str(exception)),
+                    extra={'psycho': {'sql': sql, 'params': str(params), 'filtered_stack': stack}},
+                    exc_info=exception)
                 raise exception
 
             except (psycopg2.DatabaseError, AttributeError) as exception:
                 try:
                     self.connect()
 
-                except (psycopg2.DatabaseError):
-                    print("DatabaseError: Connect retry failed.")
+                except (psycopg2.DatabaseError) as exception:
+                    logger.error(
+                        'DB: Application failed to connect to database: {}.'.format(str(exception)),
+                        extra={'psycho': {'sql': sql, 'params': str(params), 'filtered_stack': stack}},
+                        exc_info=exception)
                     raise exception
 
                 else:
+                    cursor.close()
                     continue
 
             else:
                 break
 
-        return cursor
+        return {'cursor': cursor, 'stack': stack, 'start': start}
 
     def commit(self):
         """Commit a transaction (transactional engines like InnoDB require this)"""
@@ -336,14 +384,14 @@ class Psycho:
                         self.connect()
 
                     except (psycopg2.DatabaseError, psycopg2.ProgrammingError) as exc:
-                        logger.error('Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
+                        logger.error('DB: Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
                         raise exc
 
                     else:
                         continue
 
                 except Exception as exc:
-                    logger.error('Query failed to fetch results: {}'.format(str(exc)), exc_info=exc)
+                    logger.error('DB: Query failed: {}'.format(str(exc)), exc_info=exc)
                     raise exc
 
                 else:
@@ -359,7 +407,21 @@ class Psycho:
         return rows
 
     def query_rows(self, sql, params=None):
-        return self.get_rows(self.query(sql, params))
+        cursor_obj = self.query(sql, params)
+        cursor = cursor_obj['cursor']
+        stack = cursor_obj['stack']
+        start = cursor_obj['start']
+        rows = self.get_rows(cursor)
+        string_result = str(rows)
+        logger.info(
+            'DB: Executed query.',
+            extra={'psycho': {
+                'sql': sql,
+                'params': str(params),
+                'result': string_result[:1000] if len(string_result) > 1000 else string_result,
+                'filtered_stack': stack,
+                'execution_time': str(datetime.utcnow() - start)}})
+        return rows
 
     def query_dict(self, sql, params=None):
         return self.row_to_dict(self.query_rows(sql, params))
@@ -421,7 +483,8 @@ class Psycho:
         if limit:
             sql += " LIMIT %s" % limit
 
-        return self.query(sql, where[1] if where and len(where) > 1 else None)
+        params = where[1] if where and len(where) > 1 else None
+        return {'cursor_obj': self.query(sql, params), 'sql': sql, 'params': params}
 
     def _select_join(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None, schemas=()):
         """Run an inner left join query"""
@@ -456,7 +519,8 @@ class Psycho:
         if limit:
             sql += " LIMIT %s" % limit
 
-        return self.query(sql, where[1] if where and len(where) > 1 else None)
+        cursor_obj = self.query(sql, where[1] if where and len(where) > 1 else None)
+        return cursor_obj['cursor']
 
     def __enter__(self):
         return self
