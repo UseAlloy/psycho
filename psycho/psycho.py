@@ -76,9 +76,11 @@ class Psycho:
 
         try:
             yield self
+
         except Exception as e:
             self.end()
             raise e
+
         else:
             self.commit()
 
@@ -94,8 +96,17 @@ class Psycho:
                 password=self.config['password'],
             )
         except Exception as exc:
-            logger.error('DB: Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
+            self.log('error', 'DB: Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
             raise exc
+
+    def log(self, level, message, **kwargs):
+        if 'extra' not in kwargs:
+            kwargs['extra'] = {}
+
+        if hasattr(self, 'log_data'):
+            kwargs['extra'].update(self.log_data)
+
+        getattr(logger, level.lower())(message, **kwargs)
 
     def get_one(self, table=None, fields='*', where=None, order=None, limit=1, schema=None):
         """
@@ -110,35 +121,48 @@ class Psycho:
         """
         try:
             query = self._select(table, fields, where, order, limit, schema)
-            cursor = query['cursor_obj']['cursor']
+            cursor = query['cursor']
             result = cursor.fetchone()
 
         except psycopg2.DatabaseError:
             try:
                 self.connect()
 
-            except psycopg2.DatabaseError:
-                print("DatabaseError: Connect retry failed.")
-                raise
+            except psycopg2.DatabaseError as exc:
+                self.log(
+                    'error',
+                    'DB: Application failed to connect to Database: {}'.format(str(exc)),
+                    extra={'postgresql': {
+                        'query': query['sql'],
+                        'params': str(query['params']),
+                        'filtered_stack': [
+                            line for line in traceback.format_stack() if 'python3' not in line],
+                    }},
+                    exc_info=exc)
+                raise exc
 
             else:
                 query = self._select(table, fields, where, order, limit, schema)
-                cursor = query['cursor_obj']['cursor']
+                cursor = query['cursor']
                 result = cursor.fetchone()
 
+        columns = [f[0] for f in cursor.description]
         string_result = str(result)
-        logger.info(
-            'DB: Executed query.',
-            extra={'psycho': {
-                'sql': query['sql'],
+        self.log('info', 'DB: Executed query.', extra={
+            'postgresql': {
+                'query': query['sql'],
                 'params': str(query['params']),
+                'result_columns': str(columns),
                 'result': string_result[:1000] if len(string_result) > 1000 else string_result,
-                'filtered_stack': query['cursor_obj']['stack'],
-                'execution_time': str(datetime.utcnow() - query['cursor_obj']['start'])}})
+                'filtered_stack': [
+                    line for line in traceback.format_stack() if 'python3' not in line],
+                'execution_time': str(datetime.utcnow() - query['start'])
+            }
+        })
 
         row = None
         if result:
-            Row = namedtuple("Row", [f[0] for f in cursor.description])
+            Row = namedtuple("Row", columns)
             row = Row(*result)
 
         return row
@@ -156,33 +180,47 @@ class Psycho:
         """
         try:
             query = self._select(table, fields, where, order, limit)
-            cursor = query['cursor_obj']['cursor']
+            cursor = query['cursor']
             result = cursor.fetchall()
 
         except psycopg2.DatabaseError:
             try:
                 self.connect()
 
-            except psycopg2.DatabaseError:
-                print("DatabaseError: Connect retry failed.")
-                raise
+            except psycopg2.DatabaseError as exc:
+                self.log(
+                    'error',
+                    'DB: Application failed to connect to Database: {}'.format(str(exc)),
+                    extra={'postgresql': {
+                        'query': query['sql'],
+                        'params': str(query['params']),
+                        'filtered_stack': [
+                            line for line in traceback.format_stack() if 'python3' not in line],
+                    }},
+                    exc_info=exc
+                )
+                raise exc
 
             else:
                 query = self._select(table, fields, where, order, limit)
-                cursor = query['cursor_obj']['cursor']
+                cursor = query['cursor']
                 result = cursor.fetchall()
 
+        columns = [f[0] for f in cursor.description]
         string_result = str(result)
-        logger.info(
-            'DB: Executed query.',
-            extra={'psycho': {
-                'sql': query['sql'],
+        self.log('info', 'DB: Executed query.', extra={
+            'postgresql': {
+                'query': query['sql'],
                 'params': str(query['params']),
+                'result_columns': str(columns),
                 'result': (string_result[:2000] + '...') if len(string_result) > 2000 else string_result,
-                'filtered_stack': query['cursor_obj']['stack'],
-                'execution_time': str(datetime.utcnow() - query['cursor_obj']['start'])}})
+                'filtered_stack': [
+                    line for line in traceback.format_stack() if 'python3' not in line],
+                'execution_time': str(datetime.utcnow() - query['start'])
+            }
+        })
 
-        return self.get_rows(cursor, result)
+        return self.get_rows(query, result)
 
     def left_join(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None, schemas=()):
         """
@@ -198,19 +236,32 @@ class Psycho:
         schemas = tuple(str, str) (schema1, schema2)
         """
         try:
-            cursor = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
+            query = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
+            cursor = query['cursor']
             result = cursor.fetchall()
+
         except psycopg2.DatabaseError:
             try:
                 self.connect()
-            except psycopg2.DatabaseError:
-                print("DatabaseError: Connect retry failed.")
+
+            except psycopg2.DatabaseError as exc:
+                self.log(
+                    'error',
+                    'DB: Application failed to connect to Database: {}'.format(str(exc)),
+                    extra={'postgresql': {
+                        'query': query['sql'],
+                        'params': str(query['params']),
+                        'filtered_stack': [
+                            line for line in traceback.format_stack() if 'python3' not in line]
+                    }})
                 raise
+
             else:
-                cursor = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
+                query = self._select_join(tables, fields, join_fields, where, order, limit, schemas)
+                cursor = query['cursor']
                 result = cursor.fetchall()
 
-        return self.get_rows(cursor, result)
+        return self.get_rows(query, result)
 
     def insert(self, table, data, schema=None, returning=None, close=True):
         """Insert a record"""
@@ -229,11 +280,22 @@ class Psycho:
             if isinstance(value, datetime):
                 data[key] = self._dumps_datetime(value)
 
+        params = list(data.values())
         try:
-            cursor_obj = self.query(sql, list(data.values()))
+            cursor_obj = self.query(sql, params)
 
         except Exception as exc:
-            logger.error('DB: Query failed to insert: {}'.format(str(exc)), exc_info=exc)
+            self.log(
+                'error',
+                'DB: Query failed to insert: {}'.format(str(exc)),
+                extra={'postgresql': {
+                    'query': sql,
+                    'params': str(params),
+                    'filtered_stack': [
+                        line for line in traceback.format_stack() if 'python3' not in line]
+                }},
+                exc_info=exc
+            )
             raise exc
 
         cursor = cursor_obj['cursor']
@@ -242,14 +304,29 @@ class Psycho:
                 return_val = cursor.fetchone()
 
             except Exception as exc:
-                logger.error('DB: Insert query failed to return specified fields ({}): {}'.format(
-                    str(returning), str(exc)
-                ), exc_info=exc)
+                self.log(
+                    'error',
+                    'DB: INSERT query failed to return specified fields ({}): {}'.format(
+                        str(returning), str(exc)),
+                    extra={'postgresql': {
+                        'query': sql,
+                        'params': str(params),
+                        'filtered_stack': [
+                            line for line in traceback.format_stack() if 'python3' not in line]
+                    }},
+                    exc_info=exc)
                 raise exc
 
             else:
-                logger.info(
-                    'DB: Fetched single result of INSERT query.')
+                self.log(
+                    'info',
+                    'DB: Fetched return value for INSERT query.',
+                    extra={'postgresql': {
+                        'query': sql,
+                        'params': str(params),
+                        'result': str(return_val),
+                        'filtered_stack': [
+                            line for line in traceback.format_stack() if 'python3' not in line]}})
 
         if close:
             cursor.close()
@@ -330,13 +407,18 @@ class Psycho:
             try:
                 cursor = self.connection.cursor()
                 start = datetime.utcnow()
-                stack = [line for line in traceback.format_stack() if 'python3' not in line]
                 cursor.execute(sql, params)
 
             except (psycopg2.IntegrityError, psycopg2.ProgrammingError) as exception:
-                logger.error(
-                    'DB: Execute query failed: {}.'.format(str(exception)),
-                    extra={'psycho': {'sql': sql, 'params': str(params), 'filtered_stack': stack}},
+                self.log(
+                    'error',
+                    'DB: Query failed: {}.'.format(str(exception)),
+                    extra={'postgresql': {
+                        'query': sql,
+                        'params': str(params),
+                        'filtered_stack': [
+                            line for line in traceback.format_stack() if 'python3' not in line]
+                    }},
                     exc_info=exception)
                 raise exception
 
@@ -345,9 +427,15 @@ class Psycho:
                     self.connect()
 
                 except (psycopg2.DatabaseError) as exception:
-                    logger.error(
+                    self.log(
+                        'error',
                         'DB: Application failed to connect to database: {}.'.format(str(exception)),
-                        extra={'psycho': {'sql': sql, 'params': str(params), 'filtered_stack': stack}},
+                        extra={'postgresql': {
+                            'query': sql,
+                            'params': str(params),
+                            'filtered_stack': [
+                                line for line in traceback.format_stack() if 'python3' not in line]
+                        }},
                         exc_info=exception)
                     raise exception
 
@@ -358,7 +446,7 @@ class Psycho:
             else:
                 break
 
-        return {'cursor': cursor, 'stack': stack, 'start': start}
+        return {'cursor': cursor, 'start': start}
 
     def commit(self):
         """Commit a transaction (transactional engines like InnoDB require this)"""
@@ -372,8 +460,9 @@ class Psycho:
         """Kill the connection"""
         self.connection.close()
 
-    def get_rows(self, cursor, result=None):
+    def get_rows(self, query, result=None):
         rows = []
+        cursor = query['cursor']
         if not result:
             for count in range(0, 5):
                 try:
@@ -384,14 +473,33 @@ class Psycho:
                         self.connect()
 
                     except (psycopg2.DatabaseError, psycopg2.ProgrammingError) as exc:
-                        logger.error('DB: Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
+                        self.log(
+                            'error',
+                            'DB: Application failed to connect to database: {}'.format(str(exc)),
+                            extra={'postgresql': {
+                                'query': query['sql'],
+                                'params': str(query['params']),
+                                'filtered_stack': [
+                                    line for line in traceback.format_stack() if 'python3' not in line]
+                            }},
+                            exc_info=exc
+                        )
                         raise exc
 
                     else:
                         continue
 
                 except Exception as exc:
-                    logger.error('DB: Query failed: {}'.format(str(exc)), exc_info=exc)
+                    self.log(
+                        'error',
+                        'DB: Query failed: {}'.format(str(exc)),
+                        extra={'postgresql': {
+                            'query': query['sql'],
+                            'params': str(query['params']),
+                            'filtered_stack': [
+                                line for line in traceback.format_stack() if 'python3' not in line],
+                        }},
+                        exc_info=exc)
                     raise exc
 
                 else:
@@ -407,20 +515,21 @@ class Psycho:
         return rows
 
     def query_rows(self, sql, params=None):
-        cursor_obj = self.query(sql, params)
-        cursor = cursor_obj['cursor']
-        stack = cursor_obj['stack']
-        start = cursor_obj['start']
-        rows = self.get_rows(cursor)
+        query = self.query(sql, params)
+        rows = self.get_rows(query)
+        columns = [f[0] for f in query['cursor'].description]
         string_result = str(rows)
-        logger.info(
+        self.log(
+            'info',
             'DB: Executed query.',
-            extra={'psycho': {
-                'sql': sql,
+            extra={'postgresql': {
+                'query': sql,
                 'params': str(params),
+                'result_columns': str(columns),
                 'result': string_result[:1000] if len(string_result) > 1000 else string_result,
-                'filtered_stack': stack,
-                'execution_time': str(datetime.utcnow() - start)}})
+                'filtered_stack': [
+                    line for line in traceback.format_stack() if 'python3' not in line],
+                'execution_time': str(datetime.utcnow() - query['start'])}})
         return rows
 
     def query_dict(self, sql, params=None):
@@ -484,7 +593,9 @@ class Psycho:
             sql += " LIMIT %s" % limit
 
         params = where[1] if where and len(where) > 1 else None
-        return {'cursor_obj': self.query(sql, params), 'sql': sql, 'params': params}
+        cursor_obj = self.query(sql, params)
+        cursor_obj.update({'sql': sql, 'params': params})
+        return cursor_obj
 
     def _select_join(self, tables=(), fields=(), join_fields=(), where=None, order=None, limit=None, schemas=()):
         """Run an inner left join query"""
@@ -519,8 +630,8 @@ class Psycho:
         if limit:
             sql += " LIMIT %s" % limit
 
-        cursor_obj = self.query(sql, where[1] if where and len(where) > 1 else None)
-        return cursor_obj['cursor']
+        query = self.query(sql, where[1] if where and len(where) > 1 else None)
+        return query
 
     def __enter__(self):
         return self
