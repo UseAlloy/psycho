@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name="psycho",
-    version="1.0",
+    version="0.0.2",
     description="An ultra simple wrapper for Python psycopg2 with very basic functionality",
     author="Scott Clark",
     author_email="scott@usealloy.io",
