@@ -28,7 +28,7 @@ import traceback
 import psycopg2
 
 
-logger = logging.getLogger(__name__)
+psycho_logger = logging.getLogger(__name__)
 
 
 class ConfigError(Exception):
@@ -99,6 +99,18 @@ class Psycho:
             self.log('error', 'DB: Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
             raise exc
 
+    @contextmanager
+    def named_logger(self, logger):
+        self.logger = logger
+        try:
+            yield self
+
+        except Exception:
+            raise
+
+        finally:
+            delattr(self, 'logger')
+
     def log(self, level, message, **kwargs):
         if 'extra' not in kwargs:
             kwargs['extra'] = {}
@@ -106,6 +118,7 @@ class Psycho:
         if hasattr(self, 'log_data'):
             kwargs['extra'].update(self.log_data)
 
+        logger = getattr(self, 'logger', psycho_logger)
         getattr(logger, level.lower())(message, **kwargs)
 
     def get_one(self, table=None, fields='*', where=None, order=None, limit=1, schema=None):
