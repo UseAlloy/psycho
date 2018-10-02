@@ -94,7 +94,9 @@ class Psycho:
                 port=self.config['port'],
                 user=self.config['user'],
                 password=self.config['password'],
+                autocommit=self.config['autocommit'],
             )
+
         except Exception as exc:
             self.log('error', 'DB: Application failed to connect to database: {}'.format(str(exc)), exc_info=exc)
             raise exc
