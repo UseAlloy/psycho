@@ -139,7 +139,7 @@ class Psycho:
             cursor = query['cursor']
             result = cursor.fetchone()
 
-        except psycopg2.DatabaseError:
+        except (psycopg2.DatabaseError, psycopg2.InterfaceError):
             try:
                 self.connect()
 
@@ -437,7 +437,7 @@ class Psycho:
                     exc_info=exception)
                 raise exception
 
-            except (psycopg2.DatabaseError, AttributeError) as exception:
+            except (psycopg2.DatabaseError, psycopg2.InterfaceError, AttributeError) as exception:
                 try:
                     self.connect()
 
