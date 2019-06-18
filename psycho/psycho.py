@@ -419,25 +419,33 @@ class Psycho:
         """Run a raw query"""
         # check if connection is alive. if not, reconnect
         for count in range(0, 5):
+            log_data = {'postgresql': {
+                'query': sql,
+                'params': str(params),
+                'filtered_stack': [
+                    line for line in traceback.format_stack() if 'python3' not in line]}}
+
             try:
                 cursor = self.connection.cursor()
                 start = datetime.utcnow()
                 cursor.execute(sql, params)
 
-            except (psycopg2.IntegrityError, psycopg2.ProgrammingError) as exception:
+            except (psycopg2.IntegrityError,
+                    psycopg2.ProgrammingError,
+                    psycopg2.DataError) as exception:
                 self.log(
                     'error',
                     'DB: Query failed: {}.'.format(str(exception)),
-                    extra={'postgresql': {
-                        'query': sql,
-                        'params': str(params),
-                        'filtered_stack': [
-                            line for line in traceback.format_stack() if 'python3' not in line]
-                    }},
+                    extra=log_data,
                     exc_info=exception)
                 raise exception
 
             except (psycopg2.DatabaseError, psycopg2.InterfaceError, AttributeError) as exception:
+                self.log(
+                    'error',
+                    'DB: Query failed: {}'.format(str(exception)),
+                    extra=log_data,
+                    exc_info=exception)
                 try:
                     self.connect()
 
@@ -445,12 +453,7 @@ class Psycho:
                     self.log(
                         'error',
                         'DB: Application failed to connect to database: {}.'.format(str(exception)),
-                        extra={'postgresql': {
-                            'query': sql,
-                            'params': str(params),
-                            'filtered_stack': [
-                                line for line in traceback.format_stack() if 'python3' not in line]
-                        }},
+                        extra=log_data,
                         exc_info=exception)
                     raise exception
 
