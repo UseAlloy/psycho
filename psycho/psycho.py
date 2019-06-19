@@ -435,15 +435,18 @@ class Psycho:
                     psycopg2.DataError) as exception:
                 self.log(
                     'error',
-                    'DB: Query failed: {}.'.format(str(exception)),
+                    'DB: Query failed, Raising: {}.'.format(str(exception)),
                     extra=log_data,
                     exc_info=exception)
                 raise exception
 
-            except (psycopg2.DatabaseError, psycopg2.InterfaceError, AttributeError) as exception:
+            except (psycopg2.DatabaseError,
+                    psycopg2.InterfaceError,
+                    psycopg2.OperationalError,
+                    AttributeError) as exception:
                 self.log(
-                    'error',
-                    'DB: Query failed: {}'.format(str(exception)),
+                    'warning',
+                    'DB: Query failed, Reconnecting: {}'.format(str(exception)),
                     extra=log_data,
                     exc_info=exception)
                 try:
